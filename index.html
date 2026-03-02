@@ -1017,21 +1017,30 @@ function heatColor(v) {
     const specTop=h*0.27;
     const specH=h*0.68;
 
-    // Signal
+    // Signal — show the full waveform, mapped so frame positions span the width
     drawGrid(ctx,w,sigH,2,8);
     const sigPts=[];
-    const sigShow=2048;
-    for(let i=0;i<sigShow;i++) sigPts.push([i/sigShow*w,sigH/2-sig[i]*sigH*0.35]);
+    const sigEnd=nFrames*hopSize+N; // total extent that the animation covers
+    for(let px=0;px<w;px++){
+      const i=Math.floor(px/w*sigEnd);
+      const v=(i<totalSamples)?sig[i]:0;
+      sigPts.push([px,sigH/2-v*sigH*0.35]);
+    }
     drawLine(ctx,sigPts,COL.signal+'aa',1.5);
 
-    // Frame indicator
+    // Frame indicator — highlight the current analysis window
     if(animating||animFrame>0){
-      const frameX=(animFrame/nFrames)*w;
-      const frameW=(hopSize/sigShow)*w;
+      const curFrame=Math.floor(animFrame);
+      const offset=curFrame*hopSize;
+      const fk0=fMin; // lowest bin has longest window
+      const NkMax=Math.min(Math.ceil(Q*fs/fk0),N);
+      const x0=(offset/sigEnd)*w;
+      const x1=((offset+NkMax)/sigEnd)*w;
       ctx.fillStyle=COL.accent+'22';
-      ctx.fillRect(Math.max(0,frameX-frameW/2),0,frameW,sigH);
+      ctx.fillRect(x0,0,x1-x0,sigH);
+      const frameCentre=((offset+NkMax/2)/sigEnd)*w;
       ctx.strokeStyle=COL.accent+'66';ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(frameX,0);ctx.lineTo(frameX,sigH);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(frameCentre,0);ctx.lineTo(frameCentre,sigH);ctx.stroke();
     }
 
     ctx.fillStyle=COL.text;ctx.font='10px IBM Plex Mono';
@@ -1291,12 +1300,22 @@ function heatColor(v) {
       // Pitched + percussion
       const idx=Math.floor(noteTime)%melodyNotes.length;
       const f=midiToFreq(melodyNotes[idx]);
+      // Percussion hits on every beat boundary
+      const beatPhase=noteTime%1; // 0..1 within each beat
+      const isHit=beatPhase<0.08; // short transient at the start of each beat
       for(let i=0;i<N;i++){
         const s=i/fs;
-        sig[i]+=Math.sin(TAU*f*(t+s));
-        // "Percussion" = broadband burst
-        if(Math.floor(noteTime*2)%2===0 && (i<80)){
-          sig[i]+=1.5*(Math.random()-0.5)*Math.exp(-i/20);
+        // Pitched component
+        sig[i]+=0.5*Math.sin(TAU*f*(t+s));
+        // Percussion: broadband noise burst with fast exponential decay
+        if(isHit){
+          const env=Math.exp(-beatPhase*40)*Math.exp(-i/200);
+          // Wideband energy across many frequencies
+          sig[i]+=3.0*(Math.random()-0.5)*env;
+          // Add some tonal transient clicks at various frequencies
+          sig[i]+=1.5*Math.sin(TAU*200*(t+s))*env;
+          sig[i]+=1.0*Math.sin(TAU*800*(t+s))*env*0.7;
+          sig[i]+=0.8*Math.sin(TAU*2400*(t+s))*env*0.4;
         }
       }
     }
