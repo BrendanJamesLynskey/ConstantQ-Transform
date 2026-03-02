@@ -31,38 +31,7 @@ Switch between C major, A minor, G7, and D minor chords. The full CQT spectrum i
 ### 7 · Real-World Applications
 A continuously-running CQT spectrogram displays three selectable signals: a scalar melody, a chord progression, and a pitched + percussion mix. Pitched content appears as clean horizontal bands; percussion shows as broadband vertical splashes — demonstrating why the CQT is the standard front-end for music analysis.
 
----
 
-## Deploy to GitHub Pages
-
-The project is a single `index.html` file.
-
-**Option A — Repository root:**
-
-```bash
-git init cqt-guide && cd cqt-guide
-# copy index.html into this directory
-git add index.html
-git commit -m "Initial commit"
-git remote add origin git@github.com:yourusername/cqt-guide.git
-git push -u origin main
-```
-
-Then go to **Settings → Pages → Source → Deploy from a branch → `main` / `/ (root)`**.
-
-**Option B — `docs/` folder:**
-
-```bash
-mkdir docs
-cp index.html docs/
-git add docs/
-git commit -m "Add guide to docs/"
-git push
-```
-
-Set Pages source to `main` / `/docs`.
-
-Your guide will be live at `https://yourusername.github.io/cqt-guide/`.
 
 ---
 
