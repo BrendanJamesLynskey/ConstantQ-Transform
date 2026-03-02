@@ -126,9 +126,6 @@ const chords = {
 
 ---
 
-## Companion Guide
-
-This guide pairs with [**The Wavelet Transform — A Visual Guide**](https://yourusername.github.io/wavelet-guide/), which covers wavelet decomposition, multiresolution analysis, and denoising with the same interactive approach.
 
 ---
 
