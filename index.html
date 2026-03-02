@@ -1046,20 +1046,23 @@ function heatColor(v) {
     ctx.fillStyle=COL.text;ctx.font='10px IBM Plex Mono';
     ctx.fillText('Signal',5,12);
 
-    // Spectrogram
-    const colW=Math.max(1,(w/nFrames));
+    // Spectrogram — align columns to signal sample positions
     const binH=Math.max(1,specH/K);
     const showFrame=Math.min(nFrames,Math.floor(animFrame));
 
     for(let fr=0;fr<showFrame;fr++){
       const showBin=(fr<showFrame-1)?K:Math.min(K,Math.floor(animBin));
+      const offset=fr*hopSize;
+      const nextOffset=(fr+1)*hopSize;
+      const x0=(offset/sigEnd)*w;
+      const x1=(nextOffset/sigEnd)*w;
+      const colW=x1-x0;
       for(let k=0;k<showBin;k++){
         const v=cqtData[fr][k]/maxV;
         if(v<0.02)continue;
-        const x=fr*colW;
         const y=specTop+specH-(k+1)*binH;
         ctx.fillStyle=heatColor(v);
-        ctx.fillRect(x,y,colW+1,binH+1);
+        ctx.fillRect(x0,y,colW+1,binH+1);
       }
     }
 
@@ -1084,7 +1087,8 @@ function heatColor(v) {
 
     // Scanning line
     if(animating&&animFrame<nFrames){
-      const scanX=animFrame/nFrames*w;
+      const scanOffset=Math.floor(animFrame)*hopSize;
+      const scanX=(scanOffset/sigEnd)*w;
       ctx.strokeStyle=COL.accent+'55';ctx.lineWidth=1;
       ctx.setLineDash([3,3]);
       ctx.beginPath();ctx.moveTo(scanX,specTop);ctx.lineTo(scanX,specTop+specH);ctx.stroke();
