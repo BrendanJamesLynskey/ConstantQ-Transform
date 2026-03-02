@@ -2,7 +2,7 @@
 
 An interactive, animated guide to the Constant-Q Transform (CQT), the frequency-domain representation that mirrors how we perceive musical pitch. Built entirely with vanilla HTML Canvas and JavaScript — zero dependencies.
 
-**[→ View the Live Guide](https://yourusername.github.io/cqt-guide/)**
+**[→ View the Live Guide](https://brendanjameslynskey.github.io/ConstantQ-Transform/)**
 
 ---
 
