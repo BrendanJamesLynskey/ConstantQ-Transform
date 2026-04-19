@@ -791,8 +791,79 @@ function heatColor(v) {
   const specHistory=[];
   for(let i=0;i<trailLen;i++) specHistory.push(new Float64Array(K));
 
-  playBtn.addEventListener('click',()=>{playing=true;arpTime=0;scrollPos=0;});
-  stopBtn.addEventListener('click',()=>{playing=false;});
+  // ── Audio: synthesise a piano-like note buffer per MIDI value ──
+  let audioCtx=null;
+  const activeSources=[];
+  function getAudioCtx(){
+    if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    return audioCtx;
+  }
+  function synthPianoNote(f0, dur, sr){
+    const N=Math.floor(dur*sr);
+    const out=new Float32Array(N);
+    const Binh=0.0004; // piano string inharmonicity
+    for(let h=1;h<=12;h++){
+      const fh=f0*h*Math.sqrt(1+Binh*h*h);
+      if(fh>sr/2) break;
+      const amp=Math.pow(h,-1.15)*(h<=3?1:0.7);
+      const decay=1.6+h*0.75;
+      for(let n=0;n<N;n++){
+        const t=n/sr;
+        const env=Math.exp(-decay*t)*(1-Math.exp(-t*180));
+        out[n]+=0.055*amp*env*Math.sin(2*Math.PI*fh*t);
+      }
+    }
+    // hammer noise burst
+    for(let n=0;n<Math.min(N, Math.floor(0.01*sr));n++){
+      const t=n/sr;
+      out[n]+=0.06*(Math.random()-0.5)*Math.exp(-t*280);
+    }
+    return out;
+  }
+  function stopAllSources(){
+    for(const s of activeSources){try{s.stop();}catch(e){}}
+    activeSources.length=0;
+  }
+  function scheduleArpeggio(){
+    const actx=getAudioCtx();
+    if(actx.state==='suspended') actx.resume();
+    const sr=actx.sampleRate;
+    stopAllSources();
+    // The visual advances noteIdx = floor(arpTime*3) with arpTime += 0.016 per rAF frame.
+    // At ~60 fps that's 60*0.016=0.96 arpTime units/sec, and 3 notes per arpTime unit →
+    // ~2.88 notes/sec (~347 ms per note). Match this cadence in audio.
+    const noteDur=0.347;
+    const nCycles=8; // schedule ~30 s worth; user can press Stop
+    const now=actx.currentTime;
+    // Precompute buffers once per unique MIDI value
+    const bufCache={};
+    for(const m of arpMidi){
+      if(bufCache[m]) continue;
+      const samples=synthPianoNote(midiToFreq(m), noteDur+0.4, sr);
+      const buf=actx.createBuffer(1, samples.length, sr);
+      buf.getChannelData(0).set(samples);
+      bufCache[m]=buf;
+    }
+    for(let cyc=0; cyc<nCycles; cyc++){
+      for(let i=0;i<arpMidi.length;i++){
+        const src=actx.createBufferSource();
+        src.buffer=bufCache[arpMidi[i]];
+        src.connect(actx.destination);
+        const startAt=now + (cyc*arpMidi.length + i)*noteDur;
+        src.start(startAt);
+        activeSources.push(src);
+      }
+    }
+  }
+
+  playBtn.addEventListener('click',()=>{
+    playing=true; arpTime=0; scrollPos=0;
+    scheduleArpeggio();
+  });
+  stopBtn.addEventListener('click',()=>{
+    playing=false;
+    stopAllSources();
+  });
 
   function draw(){
     ctx.clearRect(0,0,w,h);
@@ -903,17 +974,24 @@ function heatColor(v) {
     ctx.fillStyle=COL.text;ctx.font='12px Libre Franklin';
     ctx.fillText(`Bin ${k}: f = ${fk.toFixed(1)} Hz (≈${noteName})   N_k = ${Nk} samples   Q = ${Q.toFixed(1)}`,10,20);
 
+    // Centre the kernel horizontally: the visible kernel width shrinks with
+    // higher bin index, but we keep it pinned to the canvas centre so the eye
+    // can compare across bins without the plot drifting leftward.
+    const maxSamples=Math.ceil(Q*fs/fMin); // longest kernel (lowest bin)
+    const kernelW=(Nk/maxSamples)*w;       // on-screen width of this kernel
+    const startX=(w-kernelW)/2;
+    const endX=startX+kernelW;
+
     // Top: real part of kernel
     const topY=h*0.28, topH=h*0.28;
     ctx.fillStyle=COL.accent+'88';ctx.font='10px IBM Plex Mono';
     ctx.fillText('Real part of kernel',10,topY-topH*0.45);
 
     const realPts=[];
-    const maxSamples=Math.ceil(Q*fs/fMin); // longest kernel
     for(let px=0;px<w;px++){
-      const n=Math.floor(px/w*maxSamples);
       let v=0;
-      if(n<Nk){
+      if(px>=startX && px<=endX){
+        const n=Math.floor(((px-startX)/kernelW)*Nk);
         const win=0.5-0.5*Math.cos(TAU*n/Nk);
         v=win*Math.cos(TAU*fk*n/fs);
       }
@@ -928,25 +1006,28 @@ function heatColor(v) {
 
     const envPts=[];
     for(let px=0;px<w;px++){
-      const n=Math.floor(px/w*maxSamples);
       let v=0;
-      if(n<Nk) v=0.5-0.5*Math.cos(TAU*n/Nk);
+      if(px>=startX && px<=endX){
+        const n=Math.floor(((px-startX)/kernelW)*Nk);
+        v=0.5-0.5*Math.cos(TAU*n/Nk);
+      }
       envPts.push([px,botY-v*botH*1.5]);
     }
     drawFilledLine(ctx,envPts,COL.accent2,botY,0.1);
 
-    // Window length indicator
-    const endX=(Nk/maxSamples)*w;
+    // Window length indicators — both edges of the centred kernel
     ctx.strokeStyle=COL.accent+'44';ctx.lineWidth=1;
     ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(startX,30);ctx.lineTo(startX,h-10);ctx.stroke();
     ctx.beginPath();ctx.moveTo(endX,30);ctx.lineTo(endX,h-10);ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle=COL.accent+'88';ctx.font='9px IBM Plex Mono';
     ctx.fillText(`N_k = ${Nk}`,endX+4,h-15);
 
-    // Animated phase indicator
-    const phaseX=((animT*50)%Nk)/maxSamples*w;
-    if(phaseX<endX){
+    // Animated phase indicator sweeps through the centred kernel
+    const phaseFrac=((animT*50)%Nk)/Nk;
+    const phaseX=startX+phaseFrac*kernelW;
+    if(phaseX>=startX && phaseX<=endX){
       ctx.strokeStyle=COL.accent2+'44';ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(phaseX,topY-topH);ctx.lineTo(phaseX,topY+5);ctx.stroke();
     }
